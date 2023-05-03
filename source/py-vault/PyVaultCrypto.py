@@ -74,7 +74,7 @@ class PyVaultCrypto:
             # Assumed its byte array, how to check
             data = pt
         else:
-            raise TypeError('Can encrypt only a str or bytearray')
+            raise TypeError('Can encrypt only of type str or bytes')
         
         ct = encryptor.update(data) + encryptor.finalize()
         return ct, self.iv

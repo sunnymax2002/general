@@ -80,6 +80,8 @@ class PyVaultCrypto:
         return ct, self.iv
     
     def decrypt(self, ct, returnAsBytes=False):
+        #TODO: check for timeout since last verify_password
+        
         decryptor = self.cipher.decryptor()
         dt = decryptor.update(ct) + decryptor.finalize()
         if returnAsBytes:

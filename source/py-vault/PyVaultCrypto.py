@@ -4,6 +4,7 @@ import os
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from datetime import datetime, timedelta
 
 class PyVaultCrypto:
     def __init__(self, pwd: str, salt=None, iv=None):
@@ -12,6 +13,9 @@ class PyVaultCrypto:
 
         # Init cipher and iv (iv is salt used for creating cipher)
         self.cipher, self.iv = self._init_cipher(pwd, iv=iv)
+
+        # Capture last auth time
+        self.last_auth_time = datetime.now()
 
     @classmethod
     def from_persistent_data(cls, hash, salt, iv, pwd):
@@ -50,6 +54,7 @@ class PyVaultCrypto:
 
         kdf = cls._get_kdf(iv)
         key = kdf.derive(str.encode(pwd))
+
         return Cipher(algorithms.AES(key), modes.CTR(iv)), iv
 
     def verify_password(self, pwd: str):
@@ -57,6 +62,10 @@ class PyVaultCrypto:
         # Below throws Exception, wrap and return True/False
         try:
             kdf.verify(str.encode(pwd), self.hash)
+    
+            # Capture last auth time
+            self.last_auth_time = datetime.now()
+
             return True
         except:
             return False
@@ -64,7 +73,18 @@ class PyVaultCrypto:
     def get_pwd_hash(self):
         return self.hash, self.salt
     
+
+    def _check_auth_timeout(self):
+        if self.last_auth_time.timestamp() >= (datetime.now() - timedelta(minutes=1)).timestamp():
+            return True
+        else:
+            return False
+    
+
     def encrypt(self, pt):
+        if not self._check_auth_timeout():
+            raise Exception("Authentication timed out")
+        
         encryptor = self.cipher.encryptor()
 
         # If pt is string, encode to bytes
@@ -80,8 +100,9 @@ class PyVaultCrypto:
         return ct, self.iv
     
     def decrypt(self, ct, returnAsBytes=False):
-        #TODO: check for timeout since last verify_password
-        
+        if not self._check_auth_timeout():
+            raise Exception("Authentication timed out")
+
         decryptor = self.cipher.decryptor()
         dt = decryptor.update(ct) + decryptor.finalize()
         if returnAsBytes:

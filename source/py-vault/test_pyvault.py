@@ -5,6 +5,7 @@ import pytest
 import pdb
 import pickle
 import pandas as pd
+import time
 
 @pytest.fixture
 def pvc_pwd():
@@ -61,6 +62,10 @@ def test_persistent_data_pvc(pvc_pwd):
 
 def test_new_secure_entry(pvc_pwd):
     mpvc, pwd = pvc_pwd
+
+    #TODO: check auth timeout functionality
+    # time.sleep(100)
+
     cust_id = '123'
     cid_secret = 'secret'
     e1_n = 'hdfc'

@@ -23,7 +23,7 @@ class SecureEntry:
             self._pvc = pvc
         else:
             # When loading from file, create pvc
-            pvc = PyVaultCrypto(hint_resp, salt=hint_resp_hash_salt, iv=enc_data_iv)
+            self._pvc = PyVaultCrypto(hint_resp, salt=hint_resp_hash_salt, iv=enc_data_iv)
 
         self.hint_resp_hash = hint_resp_hash
         self.hint_resp_hash_salt = hint_resp_hash_salt
@@ -38,15 +38,23 @@ class SecureEntry:
         return {'id': None, 'parent_id': None, \
                 'name_hint_enc': None, 'name_hint_enc_iv': None,  \
                 'enc_data': None, 'enc_data_iv': None, \
-                'hssh': None, 'salt': None}
+                'hint_resp_hash': None, 'hint_resp_hash_salt': None}
     
 
     def get_persistent_data(self) -> dict:
         return {'id': self.id, 'parent_id': self.parent_id, \
                 'name_hint_enc': self.name_hint_enc, 'name_hint_enc_iv': self.name_hint_enc_iv,  \
                 'enc_data': self.enc_data, 'enc_data_iv': self.enc_data_iv, \
-                'hssh': self.hint_resp_hash, 'salt': self.hint_resp_hash_salt}
-    
+                'hint_resp_hash': self.hint_resp_hash, 'hint_resp_hash_salt': self.hint_resp_hash_salt}
+
+
+    @classmethod
+    def from_dict(cls, se_dict: dict, hint_resp: str, parent_pvc: PyVaultCrypto) -> SecureEntry:
+        #TODO: cross check se_dict against cls.get_schema()
+        return cls(se_dict['id'], se_dict['parent_id'], se_dict['name_hint_enc'], se_dict['name_hint_enc_iv'], \
+                   se_dict['enc_data'], se_dict['enc_data_iv'], se_dict['hint_resp_hash'], se_dict['hint_resp_hash_salt'], \
+                    hint_resp, pvc=None, parent_pvc=parent_pvc)
+
 
     @classmethod
     def from_new_data(cls, id, parent_id, name, hint, hint_resp, data, parent_pvc: PyVaultCrypto) -> SecureEntry:

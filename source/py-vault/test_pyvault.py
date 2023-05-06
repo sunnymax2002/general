@@ -100,6 +100,14 @@ def test_new_secure_entry(pvc_pwd):
     assert data == cc_pin
     assert len(child_dict) == 0
 
+    # Create from persistent data and cross check
+    e1c = SecureEntry.from_dict(e1.get_persistent_data(), cust_id, mpvc)
+    name, hint, data, child_dict = e1c.get_content()
+    assert name == e1_n
+    assert hint == e1_h
+    assert data == cid_secret
+    assert list(child_dict.keys()) == [e2_n, e3_n]
+
     entries = [e1.get_persistent_data(), e2.get_persistent_data(), e3.get_persistent_data()]
 
     df = pd.DataFrame.from_dict(entries).set_index('id')

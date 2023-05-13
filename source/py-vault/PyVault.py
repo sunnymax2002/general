@@ -8,17 +8,14 @@ from os import path
 
 
 class PyVault:
-    def __init__(self, mpvc: PyVaultCrypto, root_idx: dict, df_se: pd.DataFrame, pkl_fpath: str, cb_GetUserPwd) -> None:
+    def __init__(self, mpvc: PyVaultCrypto, root_idx: dict, df_se: pd.DataFrame, pkl_fpath: str) -> None:
         self.mpvc = mpvc
         self.root_idx = root_idx
         self.df_se = df_se
         self.pkl_fpath= pkl_fpath
 
         # The entry that has been unlocked and is currently active for use
-        self._current_se = None
-
-        #Callback function handlers
-        self._cb_GetUserPwd = cb_GetUserPwd
+        self._current_se: SecureEntry = None
 
     @classmethod
     def _write_to_file(cls, pkl_fpath, mpwd_hash, mpwd_salt, mpvc_iv, enc_root_idx: bytes, df_se: pd.DataFrame):
@@ -60,19 +57,45 @@ class PyVault:
         name, _, _, _ = se.get_content()
         if name not in root_idx.keys():
             root_idx[name] = se.id
+            return root_idx
         else:
             raise Exception("Root Entry with same name already exists")
 
-    def add_entry(self, se: SecureEntry):
-        # TODO: Check if already exists in df_se
 
-        self._update_root_idx(se)
+    def _get_new_id(self):
+        if self.df_se.empty:
+            return 0
+        else:
+            # Check df_se for max ID and assign new
+            return max(self.df_se.index) + 1
+        
+
+    def add_entry(self, n, h, hr, d, setAsCurrent=False):
+        if self._current_se is None:
+            # Adding root entry
+            se = SecureEntry.from_new_data(self._get_new_id(), None, n, h, hr, d, self.mpvc)
+            # TODO: Check if already exists in df_se
+            self.root_idx = self._update_root_idx(root_idx=self.root_idx, se=se)
+        else:
+            #TODO: Fix mpvc with parent...
+            se = SecureEntry.from_new_data(self._get_new_id(), self._current_se.id, n, h, hr, d, self.mpvc)
+
+        # Add to df
+        self.df_se.loc[self.df_se.index] = se
+
+        # TODO
+        if setAsCurrent:
+            pass
+
 
     def find_entry(self, search_text) -> dict:
         '''At current level, searches and finds matching entries and reports dict(name, id)'''
 
+        if self._current_se is None:
+            # Search in root
+            return {key:val for (key, val) in self.root_idx.items() if search_text in key}
         return {}
-    
+
 
     def _check_open_entry(self, id):
         #TODO: Check if entry is child of open parent

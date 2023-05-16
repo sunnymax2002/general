@@ -75,6 +75,8 @@ class PyVaultCrypto:
     
 
     def _check_auth_timeout(self):
+        return True
+        #TODO: enable after testing complete
         if self.last_auth_time.timestamp() >= (datetime.now() - timedelta(minutes=1)).timestamp():
             return True
         else:

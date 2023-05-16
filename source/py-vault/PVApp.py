@@ -22,7 +22,7 @@ k_txt_hint = 'txt_hint'
 k_txt_pwd = 'txt_pwd'
 k_btn_oe = 'btn_open_entry'
 
-default_lbl_pe = "Parent Entry: None"
+default_lbl_pe = "Parent Entry: Root"
 default_lbl_se = "Seacrh Entry"
 
 # Search Box / Drop-down
@@ -96,6 +96,9 @@ def add_entry(n, h, hr, d):
     pv.add_entry(n, h, hr, d)
 
 
+def get_parent() -> str:
+    return pv.get_entry_tree()
+
 # Event Loop
 while True:
     event, values = window.read()
@@ -105,19 +108,20 @@ while True:
         break
 
     elif event == k_btn_unlock:
-        # Unlock using Master Password
-        pv = read_pv_data(values[k_txt_mpwd])
-
-        if pv is not None:
-            # Unlock other GUI elements
+        try:
+            # Unlock using Master Password
+            pv = read_pv_data(values[k_txt_mpwd])
+        except Exception as e:
+            ch = sg.popup_error('Incorrect Master Password')
+            # window[k_lbl_prompt].update('Incorrect Master Password')
+        else:
+            # Unlock other GUI elements, if unlocked successfully
             window[k_txt_se].update(disabled=False)
             window[k_btn_se].update(disabled=False)
             window[k_txt_hint].update(disabled=False)
             window[k_txt_pwd].update(disabled=False)
             window[k_txt_sdata].update(disabled=False)
             window[k_btn_sdata].update(disabled=False)
-        else:
-            window[k_lbl_prompt].update('Incorrect Master Password')
 
     elif event == k_btn_se:
         # Search for Entry
@@ -141,6 +145,8 @@ while True:
 
         if ch == 'OK':
             add_entry(n, h, hr, d)
-            #TODO: Update Parent Entry?
+            
+            # Update Parent Entry?
+            window[k_lbl_pe].update(get_parent())
 
 window.close()

@@ -25,10 +25,8 @@ class PyVault:
     @classmethod
     def _read_from_file(cls, pkl_fpath):
         with open(pkl_fpath, 'rb') as rf:
-            mpwd_hash, mpwd_salt, mpvc_iv, enc_objs, df_se = pickle.load(rf)
+            mpwd_hash, mpwd_salt, mpvc_iv, enc_root_idx, df_se = pickle.load(rf)
 
-        # enc_root_idx load using pickle
-        enc_root_idx = pickle.loads(enc_objs)
         return mpwd_hash, mpwd_salt, mpvc_iv, enc_root_idx, df_se
 
 
@@ -48,7 +46,8 @@ class PyVault:
         mpvc = PyVaultCrypto.from_persistent_data(mpwd_hash, mpwd_salt, mpvc_iv, mpwd)
 
         # Decrypt root index
-        root_idx = dict(mpvc.decrypt(enc_root_idx, returnAsBytes=True))
+        objs = mpvc.decrypt(enc_root_idx, returnAsBytes=True)
+        root_idx= pickle.loads(objs)
 
         return cls(mpvc, root_idx, df_se, pkl_fpath)
     
@@ -98,7 +97,7 @@ class PyVault:
 
         # Write to file
         objs = pickle.dumps(self.root_idx)
-        enc_root_idx = self.mpvc.encrypt(objs)   # Encrypt root_idx dict using pickle
+        enc_root_idx, _ = self.mpvc.encrypt(objs)   # Encrypt root_idx dict using pickle
         self._write_to_file(self.pkl_fpath, self.mpvc.hash, self.mpvc.salt, self.mpvc.iv, enc_root_idx, self.df_se)
 
         if setAsCurrent:

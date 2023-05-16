@@ -108,6 +108,7 @@ while True:
         break
 
     elif event == k_btn_unlock:
+        window[k_btn_unlock].set_cursor("clock")
         try:
             # Unlock using Master Password
             pv = read_pv_data(values[k_txt_mpwd])
@@ -122,6 +123,8 @@ while True:
             window[k_txt_pwd].update(disabled=False)
             window[k_txt_sdata].update(disabled=False)
             window[k_btn_sdata].update(disabled=False)
+        finally:
+            window[k_btn_unlock].set_cursor("arrow")
 
     elif event == k_btn_se:
         # Search for Entry

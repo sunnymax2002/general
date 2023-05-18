@@ -5,6 +5,7 @@ from SecureEntry import SecureEntry
 from typing import Tuple
 import pickle
 from os import path
+from typing import Dict
 
 
 class PyVault:
@@ -14,8 +15,13 @@ class PyVault:
         self.df_se = df_se
         self.pkl_fpath= pkl_fpath
 
+        self._reset_non_persistent_fields()
+
+    def _reset_non_persistent_fields(self):
         # The entry that has been unlocked and is currently active for use
         self._current_se: SecureEntry = None
+        # Tree of entries opened
+        self._opened_tree: Dict[int, SecureEntry] = {}
 
     @classmethod
     def _write_to_file(cls, pkl_fpath, mpwd_hash, mpwd_salt, mpvc_iv, enc_root_idx: bytes, df_se: pd.DataFrame):
@@ -103,6 +109,9 @@ class PyVault:
         if setAsCurrent:
             self._current_se = se
 
+        # Update opened_tree
+        self._opened_tree[se.id] = se
+
 
     def find_entry(self, search_text) -> dict:
         '''At current level, searches and finds matching entries and reports dict(name, id)'''
@@ -116,30 +125,99 @@ class PyVault:
         return {key:val for (key, val) in search_dict if search_text in key}
 
 
-    def _check_open_entry(self, id):
-        #TODO: Check if entry is child of open parent
+    def get_name_hint_by_id(self, id):
+        # Check if part of opened tree
+        if id in self._opened_tree:
+            n, h, _, _ = self._opened_tree[id].get_content()
+            return n, h
+        else:
+            return None, None
 
-        self.df_se[self.df_se.index == id]
+    def get_entry_securecontent(self, id, pwd: str):
+        # Check if part of opened tree
+        if id in self._opened_tree:
+            # Auth
+            se = self._opened_tree[id]
+            try:
+                se.auth(pwd)
+            except:
+                return None
+            
+            _, _, sc, _ = se.get_content()
+            return sc
+        else:
+            return None
 
+    def open_entry(self, id, pwd=None, setAsCurrent=False) -> SecureEntry:
+        '''Opens the entry with id, the parent of id must be open or else return None'''
 
-    def open_entry(self, id):
-        '''Opens the entry with id, the parent of id must be open or else throws an error'''
+        # Check if entry already open
+        if id in self._opened_tree:
+            self._current_se = self._opened_tree[id]
+            # Clear lower level entries from opened_tree
+            keys = list(self._opened_tree.keys())
+            lidx = keys.index(id)
+            keys_to_remove = keys[lidx + 1:]
+            for k in keys_to_remove:
+                self._opened_tree.pop(k)
 
-        # Fetch the entry from df
-        se = self._check_open_entry(id)
+            return self._current_se
 
-        # Get pwd to open the entry
+        if id in self.df_se.index:
+            # Assumed a single row shall be returned since id is unique key
+            se_dict = self.df_se.loc[self.df_se.index == id].iloc[0].to_dict()
+
+            if se_dict is not None:
+                # Check if parent is in entry_tree?
+                p_id = se_dict['parent_id']
+                if p_id is None:
+                    # Root entry, return mpvc
+                    parent_pvc = self.mpvc
+                elif p_id in self._opened_tree:
+                    parent_pvc = self._opened_tree[p_id].get_pvc()
+                else:
+                    return None
+                
+                # Since id is index column, it is omitted, so add back
+                se_dict['id'] = id
+                se = SecureEntry.from_dict(se_dict, hint_resp=None, parent_pvc=parent_pvc)
+        else:
+            return None
+
+        # Auth if pwd provided
+        if pwd is not None:
+            se.auth(pwd)
+        
+        self._opened_tree[se.id] = se
+
+        if setAsCurrent:
+            self._current_se = se
+
+        return se
+    
 
     def get_entry_tree(self):
-        '''Returns a Tree of entries with current entry at the bottom, and root at top'''
-        if self._current_se is None:
-            return 'Parent Entry: Root'
+        # '''Returns a Tree of entries with current entry at the bottom, and root at top'''
+        # if self._current_se is None:
+        #     return 'Parent Entry: Root'
         
-        e = self._current_se
-        n, _, _, _ = e.get_content()
-        tree_txt = n
-        while e.parent_id is not None:
-            n, _, _, _ = e.get_content()
-            tree_txt = n + ' -> ' + tree_txt
+        # e = self._current_se
+        # n, _, _, _ = e.get_content()
+        # tree_txt = n
+        # while e.parent_id is not None:
+        #     n, _, _, _ = e.get_content()
+        #     tree_txt = n + ' -> ' + tree_txt
         
-        return 'Parent Entry: Root -> ' + tree_txt
+        # return 'Parent Entry: Root -> ' + tree_txt
+
+        tree_dict = {'0 - Root': None}
+        lvl = 1
+        for se in self._opened_tree.values():
+            n, _, _, _ = se.get_content()
+            tree_dict['{0} - {1}'.format(lvl, n)] = se.id
+            lvl += 1
+
+        return tree_dict
+
+    def close_all(self):
+        self._reset_non_persistent_fields()

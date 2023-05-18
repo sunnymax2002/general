@@ -22,8 +22,11 @@ class SecureEntry:
         if pvc is not None:
             self._pvc = pvc
         else:
-            # When loading from file, create pvc
-            self._pvc = PyVaultCrypto(hint_resp, salt=hint_resp_hash_salt, iv=enc_data_iv)
+            if hint_resp is not None:
+                # When loading from file, create pvc
+                self._pvc = PyVaultCrypto(hint_resp, salt=hint_resp_hash_salt, iv=enc_data_iv)
+            else:
+                self._pvc = None
 
         self.hint_resp_hash = hint_resp_hash
         self.hint_resp_hash_salt = hint_resp_hash_salt
@@ -82,11 +85,21 @@ class SecureEntry:
     def _decrypt(self) -> Tuple(str, str, str, dict):
         # Decrypt and Convert back to Tuple format
         name, hint = pickle.loads(self._parent_pvc.decrypt(self.name_hint_enc, returnAsBytes=True))
-        data, child_dict = pickle.loads(self._pvc.decrypt(self.enc_data, returnAsBytes=True))
+
+        if self._pvc is not None:
+            data, child_dict = pickle.loads(self._pvc.decrypt(self.enc_data, returnAsBytes=True))
+        else:
+            data = None
+            child_dict = None
+        
         return name, hint, data, child_dict
     
 
     def auth(self, pwd):
+        # PVC to be initialized if se created without hint_resp
+        if self._pvc is None:
+            self._pvc = PyVaultCrypto(pwd, salt=self.hint_resp_hash_salt, iv=self.enc_data_iv)
+
         return self._pvc.verify_password(pwd)
 
 

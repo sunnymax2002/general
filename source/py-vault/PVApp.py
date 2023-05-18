@@ -3,12 +3,16 @@ from PyVault import PyVault
 from SecureEntry import SecureEntry as se
 from os import path
 
+import sys
+if not sys.version_info >= (3, 6):
+   print("This program uses Python 3.6 features, please upgrade your Python version")
+
 # REF: https://realpython.com/pysimplegui-python/
 
 k_txt_mpwd = 'txt_mpwd'
 k_btn_unlock = 'btn_unlock'
 
-k_lbl_pe = 'lbl_parent_entry'
+# k_lbl_pe = 'lbl_parent_entry'
 k_lbl_se = 'lbl_search_entry'
 k_btn_se = 'btn_search_entry'
 k_txt_se = 'txt_search_entry'
@@ -39,6 +43,11 @@ default_txt_sdata = 'Enter Data to Secure'
 k_txt_sdata = 'txt_sdata'
 k_btn_sdata = 'btn_sdata'
 
+k_lst_setree = 'lst_setree'
+
+# Dictionary of name:id to get to an entry in parent treee
+se_tree_dict = {}
+
 layout = [
     [
     sg.Text('Enter Master Password', key='lbl_mpwd'),
@@ -46,7 +55,7 @@ layout = [
     sg.Button("Unlock", key=k_btn_unlock)
     ],
     [
-    sg.Text(default_lbl_pe, key=k_lbl_pe)
+    sg.Listbox(list(se_tree_dict.keys()), size=(20, 4), expand_y=True, enable_events=True, key=k_lst_setree, disabled=True, select_mode='single')
     ],
     [
     sg.Text(default_lbl_se, key=k_lbl_se),
@@ -93,11 +102,51 @@ def search_entry(search_txt: str) -> dict:
 
 
 def add_entry(n, h, hr, d):
-    pv.add_entry(n, h, hr, d)
+    pv.add_entry(n, h, hr, d, setAsCurrent=True)
 
 
 def get_parent() -> str:
     return pv.get_entry_tree()
+
+
+def update_curr_selected(n: str, h: str):
+    pass
+
+def update_se_tree():
+    global se_tree_dict
+
+    se_tree_dict = pv.get_entry_tree()
+    window[k_lst_setree].update(disabled=False, values=list(se_tree_dict.keys()), set_to_index=len(se_tree_dict.keys())-1)
+
+def clear_fields():
+    window[k_txt_se].update(values=[])
+    window[k_txt_hint].update(value='')
+    window[k_txt_pwd].update(value='')
+    window[k_txt_sdata].update(value='')
+
+def open_entry(id: int):
+    # Open n/h w/o pwd
+    pv.open_entry(id)
+
+    # Fetch name and hint and populate
+    n, h = pv.get_name_hint_by_id(id)
+
+    clear_fields()
+    window[k_txt_se].update(values=[n], set_to_index=0)
+    window[k_txt_hint].update(value=h)
+
+    # Enable Open button
+    window[k_btn_oe].update(disabled=False)
+
+def close_all():
+    pv.close_all()
+    clear_fields()
+    window[k_btn_oe].update(disabled=True)
+
+def get_selected_id():
+    sel = values[k_lst_setree][0]
+    # Get id of selected entry in the tree
+    return se_tree_dict[sel]
 
 # Event Loop
 while True:
@@ -117,6 +166,7 @@ while True:
             # window[k_lbl_prompt].update('Incorrect Master Password')
         else:
             # Unlock other GUI elements, if unlocked successfully
+            update_se_tree()
             window[k_txt_se].update(disabled=False)
             window[k_btn_se].update(disabled=False)
             window[k_txt_hint].update(disabled=False)
@@ -136,6 +186,12 @@ while True:
         window[k_lbl_prompt].update('{0} matching entries found'.format(len(entries)))
         if len(entries) > 0:
             window[k_txt_se].update(values=list(entries.keys()), set_to_index=0)
+
+            if len(entries) == 1:
+                id = list(entries.values())[0]
+                open_entry(id)
+            
+            update_se_tree()
     
     elif event == k_btn_sdata:
         n = values[k_txt_se]
@@ -148,8 +204,29 @@ while True:
 
         if ch == 'OK':
             add_entry(n, h, hr, d)
-            
-            # Update Parent Entry?
-            window[k_lbl_pe].update(get_parent())
+            update_se_tree()
+
+    elif event == k_lst_setree:
+        id = get_selected_id()
+        if id is None:
+            close_all()
+        else:
+            open_entry(id)
+        
+        update_se_tree()
+    
+    elif event == k_btn_oe:
+        id = get_selected_id()
+        hr = values[k_txt_pwd]
+
+        window[k_btn_oe].set_cursor("clock")
+        sc = pv.get_entry_securecontent(id, hr)
+        window[k_btn_oe].set_cursor("arrow")
+
+        if sc is None:
+            sg.popup_error('Incorrect Hint Response')
+        else:
+            window[k_txt_sdata].update(value=sc)
+            # TODO: add timeout to clear k_txt_sdata
 
 window.close()

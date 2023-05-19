@@ -117,9 +117,23 @@ class SecureEntry:
     def add_child(self, child: SecureEntry):
         # Decrypt to get child_dict
         name, hint, data, child_dict = self._decrypt()
-            
-        child_dict[child.get_content()[0]] = child.id
-        self.name_hint_enc, self.name_hint_enc_iv, self.enc_data, self.enc_data_iv = self._encrypt(name, hint, data, child_dict, self._pvc, self._parent_pvc)
+        
+        child_name, _, _, _ = child._decrypt()
+
+        if child_name in child_dict:
+            raise Exception("Child Entry with same name already exists")
+        else:
+            child_dict[child_name] = child.id
+            a, b, c, d = self._encrypt(name, hint, data, child_dict, self._pvc, self._parent_pvc)
+            self.name_hint_enc = a
+            self.name_hint_enc_iv = b
+            self.enc_data = c
+            self.enc_data_iv = d
+
+            # Debug code
+            p, q, r, s = self._decrypt()
+            assert (p == name and q == hint and r == data and s == child_dict)
+            return child_dict
 
 
     def get_content(self):

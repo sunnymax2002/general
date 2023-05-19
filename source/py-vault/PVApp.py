@@ -126,7 +126,7 @@ def clear_fields():
 
 def open_entry(id: int):
     # Open n/h w/o pwd
-    pv.open_entry(id)
+    pv.open_entry(id, setAsCurrent=True)
 
     # Fetch name and hint and populate
     n, h = pv.get_name_hint_by_id(id)
@@ -162,7 +162,7 @@ while True:
             # Unlock using Master Password
             pv = read_pv_data(values[k_txt_mpwd])
         except Exception as e:
-            ch = sg.popup_error('Incorrect Master Password')
+            sg.popup_error('Incorrect Master Password')
             # window[k_lbl_prompt].update('Incorrect Master Password')
         else:
             # Unlock other GUI elements, if unlocked successfully
@@ -179,32 +179,41 @@ while True:
     elif event == k_btn_se:
         # Search for Entry
         search_txt = values[k_txt_se]
-        entries = search_entry(search_txt)
 
-        # entries = {'hdfc': 1, 'zhdfc': 2}
+        # If root, or current entry unlocked, then only search
+        if pv.is_curr_entry_unlocked():
+            entries = search_entry(search_txt)
 
-        window[k_lbl_prompt].update('{0} matching entries found'.format(len(entries)))
-        if len(entries) > 0:
-            window[k_txt_se].update(values=list(entries.keys()), set_to_index=0)
+            # window[k_lbl_prompt].update('{0} matching entries found'.format(len(entries)))
+            if len(entries) > 0:
+                window[k_txt_se].update(values=list(entries.keys()), set_to_index=0)
 
-            if len(entries) == 1:
-                id = list(entries.values())[0]
-                open_entry(id)
-            
-            update_se_tree()
+                if len(entries) == 1:
+                    id = list(entries.values())[0]
+                    open_entry(id)
+                
+                update_se_tree()
+            else:
+                sg.popup_error('No maching entry found')
+        else:
+            sg.popup_error('Before searching, Open the selected entry first by providing Hint Response')
     
     elif event == k_btn_sdata:
-        n = values[k_txt_se]
-        h = values[k_txt_hint]
-        hr = values[k_txt_pwd]
-        d = values[k_txt_sdata]
+        # If root, or current entry unlocked, then only add
+        if pv.is_curr_entry_unlocked():
+            n = values[k_txt_se]
+            h = values[k_txt_hint]
+            hr = values[k_txt_pwd]
+            d = values[k_txt_sdata]
 
-        msg = 'Name={0}\nHint={1}\nHint Respose={2}\nData={3}'.format(n, h, hr, d)
-        ch = sg.popup_ok_cancel(msg, '',  title="Confirm Entry Addition")
+            msg = 'Name={0}\nHint={1}\nHint Respose={2}\nData={3}'.format(n, h, hr, d)
+            ch = sg.popup_ok_cancel(msg, '',  title="Confirm Entry Addition")
 
-        if ch == 'OK':
-            add_entry(n, h, hr, d)
-            update_se_tree()
+            if ch == 'OK':
+                add_entry(n, h, hr, d)
+                update_se_tree()
+        else:
+            sg.popup_error('Before Adding, Open the selected entry first by providing Hint Response')
 
     elif event == k_lst_setree:
         id = get_selected_id()

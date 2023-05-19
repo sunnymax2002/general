@@ -82,7 +82,22 @@ class PyVault:
     def _add_to_df(self, se: SecureEntry):
         # Check if exists in df
         if se.id in self.df_se.index:
-            self.df_se.loc[self.df_se.index == se.id] = se.get_persistent_data()
+            # self.df_se.loc[self.df_se.index == se.id].update(pd.DataFrame(se.get_persistent_data(), index=['id']))
+            # self.df_se.update(pd.DataFrame(se.get_persistent_data(), index=['id']))
+
+            # t = self.df_se['enc_data']
+            # self.df_se.drop(self.df_se[self.df_se.index == se.id].index, inplace=True)
+
+            # Get data and remove id field since it is index in df
+            data = se.get_persistent_data()
+            data.pop('id')
+            # Update row: TODO: why can't it work as a single assignment: self.df_se.loc[self.df_se.index == se.id] = data
+            for k, v in data.items():
+                self.df_se.loc[self.df_se.index == se.id, k] = v
+
+            # r = self.df_se['enc_data']
+            # print(t)
+            # print(r)
         else:
             # Add to df as new entry
             self.df_se.loc[len(self.df_se.index)] = se.get_persistent_data()
@@ -120,10 +135,13 @@ class PyVault:
             # Search in root
             search_dict = self.root_idx.items()
         else:
-            _, _, _, search_dict = self._current_se.get_content()
+            _, _, _, s = self._current_se.get_content()
+            search_dict = s.items()
             
-        return {key:val for (key, val) in search_dict if search_text in key}
-
+        if search_dict is not None:
+            return {key:val for (key, val) in search_dict if search_text in key}
+        else:
+            return {}
 
     def get_name_hint_by_id(self, id):
         # Check if part of opened tree
@@ -221,3 +239,14 @@ class PyVault:
 
     def close_all(self):
         self._reset_non_persistent_fields()
+
+    def is_curr_entry_unlocked(self) -> bool:
+        if self._current_se is not None:
+            if self._current_se._pvc is not None:
+                return True
+        else:
+            # If at root, is mpvc valid?
+            if self.mpvc is not None:
+                return True
+        
+        return False

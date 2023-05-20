@@ -6,6 +6,7 @@ from typing import Tuple
 import pickle
 from os import path
 from typing import Dict
+import traceback
 
 
 class PyVault:
@@ -17,16 +18,6 @@ class PyVault:
 
         self._reset_non_persistent_fields()
 
-    def _reset_non_persistent_fields(self):
-        # The entry that has been unlocked and is currently active for use
-        self._current_se: SecureEntry = None
-        # Tree of entries opened
-        self._opened_tree: Dict[int, SecureEntry] = {}
-
-    @classmethod
-    def _write_to_file(cls, pkl_fpath, mpwd_hash, mpwd_salt, mpvc_iv, enc_root_idx: bytes, df_se: pd.DataFrame):
-        with open(pkl_fpath, 'wb') as wf:
-            pickle.dump((mpwd_hash, mpwd_salt, mpvc_iv, enc_root_idx, df_se), wf)
 
     @classmethod
     def _read_from_file(cls, pkl_fpath):
@@ -43,6 +34,7 @@ class PyVault:
         df_se.set_index(['id'], inplace=True)
         return cls(mpvc, {}, df_se, pkl_fpath)
 
+
     @classmethod
     def from_persistent_data(cls, pkl_fpath, mpwd):
         # Read persisted objects from pickle file
@@ -57,6 +49,7 @@ class PyVault:
 
         return cls(mpvc, root_idx, df_se, pkl_fpath)
     
+
     @classmethod
     def _update_root_idx(cls, root_idx: dict, se: SecureEntry):
         if se.parent_id is not None:
@@ -69,6 +62,20 @@ class PyVault:
             return root_idx
         else:
             raise Exception("Root Entry with same name already exists")
+
+
+    def _write_to_file(self):
+        with open(self.pkl_fpath, 'wb') as wf:
+            objs = pickle.dumps(self.root_idx)
+            enc_root_idx, _ = self.mpvc.encrypt(objs)   # Encrypt root_idx dict using pickle
+            pickle.dump((self.mpvc.hash, self.mpvc.salt, self.mpvc.iv, enc_root_idx, self.df_se), wf)
+
+
+    def _reset_non_persistent_fields(self):
+        # The entry that has been unlocked and is currently active for use
+        self._current_se: SecureEntry = None
+        # Tree of entries opened
+        self._opened_tree: Dict[int, SecureEntry] = {}
 
 
     def _get_new_id(self):
@@ -117,9 +124,7 @@ class PyVault:
             self._add_to_df(self._current_se)
 
         # Write to file
-        objs = pickle.dumps(self.root_idx)
-        enc_root_idx, _ = self.mpvc.encrypt(objs)   # Encrypt root_idx dict using pickle
-        self._write_to_file(self.pkl_fpath, self.mpvc.hash, self.mpvc.salt, self.mpvc.iv, enc_root_idx, self.df_se)
+        self._write_to_file()
 
         if setAsCurrent:
             self._current_se = se
@@ -143,6 +148,7 @@ class PyVault:
         else:
             return {}
 
+
     def get_name_hint_by_id(self, id):
         # Check if part of opened tree
         if id in self._opened_tree:
@@ -151,6 +157,7 @@ class PyVault:
         else:
             return None, None
 
+
     def get_entry_securecontent(self, id, pwd: str):
         # Check if part of opened tree
         if id in self._opened_tree:
@@ -158,16 +165,27 @@ class PyVault:
             se = self._opened_tree[id]
             try:
                 se.auth(pwd)
-            except:
+                _, _, sc, _ = se.get_content()
+                return sc
+            except Exception:
+                traceback.print_exc()
                 return None
-            
-            _, _, sc, _ = se.get_content()
-            return sc
         else:
             return None
 
-    def open_entry(self, id, pwd=None, setAsCurrent=False) -> SecureEntry:
-        '''Opens the entry with id, the parent of id must be open or else return None'''
+
+    def curr_entry_has_child(self):
+        if self._current_se is not None:
+            if self._current_se._pvc is not None:
+                return self._current_se.has_child()
+        else:
+            # If at root, is mpvc valid?
+            if self.mpvc is not None:
+                return (len(self.root_idx) > 0)
+
+
+    def open_entry(self, id, pwd=None, setAsCurrent=False) -> bool:
+        '''Opens the entry with id (it is required that the parent of id must be open). If success, returns True else False'''
 
         # Check if entry already open
         if id in self._opened_tree:
@@ -179,8 +197,10 @@ class PyVault:
             for k in keys_to_remove:
                 self._opened_tree.pop(k)
 
-            return self._current_se
+            # return self._current_se
+            return True
 
+        # If entry not open
         if id in self.df_se.index:
             # Assumed a single row shall be returned since id is unique key
             se_dict = self.df_se.loc[self.df_se.index == id].iloc[0].to_dict()
@@ -189,44 +209,35 @@ class PyVault:
                 # Check if parent is in entry_tree?
                 p_id = se_dict['parent_id']
                 if p_id is None:
-                    # Root entry, return mpvc
+                    # Root entry, use mpvc
                     parent_pvc = self.mpvc
                 elif p_id in self._opened_tree:
+                    # Get parent_pvc
                     parent_pvc = self._opened_tree[p_id].get_pvc()
                 else:
-                    return None
+                    return False
                 
                 # Since id is index column, it is omitted, so add back
                 se_dict['id'] = id
                 se = SecureEntry.from_dict(se_dict, hint_resp=None, parent_pvc=parent_pvc)
         else:
-            return None
+            return False
 
         # Auth if pwd provided
         if pwd is not None:
             se.auth(pwd)
         
+        # Update opened tree
         self._opened_tree[se.id] = se
 
         if setAsCurrent:
             self._current_se = se
 
-        return se
+        return True
     
 
     def get_entry_tree(self):
         # '''Returns a Tree of entries with current entry at the bottom, and root at top'''
-        # if self._current_se is None:
-        #     return 'Parent Entry: Root'
-        
-        # e = self._current_se
-        # n, _, _, _ = e.get_content()
-        # tree_txt = n
-        # while e.parent_id is not None:
-        #     n, _, _, _ = e.get_content()
-        #     tree_txt = n + ' -> ' + tree_txt
-        
-        # return 'Parent Entry: Root -> ' + tree_txt
 
         tree_dict = {'0 - Root': None}
         lvl = 1
@@ -236,9 +247,11 @@ class PyVault:
             lvl += 1
 
         return tree_dict
+    
 
     def close_all(self):
         self._reset_non_persistent_fields()
+
 
     def is_curr_entry_unlocked(self) -> bool:
         if self._current_se is not None:
@@ -250,3 +263,36 @@ class PyVault:
                 return True
         
         return False
+    
+
+    def has_curr_entry_changed(self, n, h, hr, d):
+        # TODO: add logic - might not be necessary unless some security concern in updating without checking
+        return True
+    
+
+    def update_curr_entry(self, n, h, hr, d) -> bool:
+        if self._current_se is not None:
+            # Create new curr_entry
+            id = self._current_se.id
+            parent_pvc = self._current_se._parent_pvc
+            p_id = self._current_se.parent_id
+            n_se = SecureEntry.from_new_data(id, p_id, n, h, hr, d, parent_pvc)
+
+            # Debug only
+            oe = self._current_se
+            ed = oe.enc_data == n_se.enc_data
+            edi = oe.enc_data_iv == n_se.enc_data_iv
+            nhe = oe.name_hint_enc == n_se.name_hint_enc
+            nhei = oe.name_hint_enc_iv == n_se.name_hint_enc_iv
+            hrh = oe.hint_resp_hash == n_se.hint_resp_hash
+            hrhs = oe.hint_resp_hash_salt == n_se.hint_resp_hash_salt
+
+            # Update curr entry
+            self._current_se = n_se
+
+            # Update df and write to file
+            self._add_to_df(self._current_se)
+            self._write_to_file()
+            return True
+        else:
+            return False

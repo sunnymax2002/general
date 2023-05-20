@@ -103,6 +103,17 @@ class SecureEntry:
         return self._pvc.verify_password(pwd)
 
 
+    def has_child(self):
+        # Decrypt to get child_dict
+        _, _, _, child_dict = self._decrypt()
+
+        # Check if already exists
+        if len(child_dict) > 0:
+            return True
+        else:
+            return False
+        
+
     def child_exist(self, child_name):
         # Decrypt to get child_dict
         _, _, _, child_dict = self._decrypt()

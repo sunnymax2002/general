@@ -25,6 +25,8 @@ k_txt_hint = 'txt_hint'
 
 k_txt_pwd = 'txt_pwd'
 k_btn_oe = 'btn_open_entry'
+k_btn_ue = 'btn_update_entry'
+k_btn_de = 'btn_delete_entry'
 
 default_lbl_pe = "Parent Entry: Root"
 default_lbl_se = "Seacrh Entry"
@@ -52,7 +54,7 @@ layout = [
     [
     sg.Text('Enter Master Password', key='lbl_mpwd'),
     sg.In(enable_events=True, key=k_txt_mpwd, password_char='*'),
-    sg.Button("Unlock", key=k_btn_unlock)
+    sg.Button("Unlock Database", key=k_btn_unlock)
     ],
     [
     sg.Listbox(list(se_tree_dict.keys()), size=(20, 4), expand_y=True, enable_events=True, key=k_lst_setree, disabled=True, select_mode='single')
@@ -60,7 +62,9 @@ layout = [
     [
     sg.Text(default_lbl_se, key=k_lbl_se),
     sg.Combo(se_lst, default_value=default_txt_se, enable_events=True, key=k_txt_se, disabled=True),
-    sg.Button("Search", key=k_btn_se, disabled=True)
+    sg.Button("Search Child", key=k_btn_se, disabled=True),
+    sg.Button("Update", key=k_btn_ue, disabled=True),
+    sg.Button("Delete", key=k_btn_de, disabled=True)
     ],
     [
     sg.Text(default_lbl_hint, key=k_lbl_hint),
@@ -74,7 +78,7 @@ layout = [
     [
     sg.Text(default_lbl_sdata, key=k_lbl_sdata),
     sg.In(enable_events=True, key=k_txt_sdata, disabled=True, default_text=default_txt_sdata),
-    sg.Button("Add", key=k_btn_sdata, disabled=True)
+    sg.Button("Add Child", key=k_btn_sdata, disabled=True)
     ],
     [
     sg.Text(default_lbl_prompt, key=k_lbl_prompt)
@@ -85,6 +89,8 @@ window = sg.Window(title="Py Vault by Sunny", layout=layout, margins=(100, 50))
 
 # View - Model interactions
 pv = None
+
+# State variables
 
 def read_pv_data(mpwd: str) -> PyVault:
     pkl_fpath=r"C:\Users\sunny\My Drive (sbav2309@gmail.com)\Home and Life\Vault\pvc_data.pkl"
@@ -105,12 +111,12 @@ def add_entry(n, h, hr, d):
     pv.add_entry(n, h, hr, d, setAsCurrent=True)
 
 
-def get_parent() -> str:
-    return pv.get_entry_tree()
+# def get_parent() -> str:
+#     return pv.get_entry_tree()
 
 
-def update_curr_selected(n: str, h: str):
-    pass
+# def update_curr_selected(n: str, h: str):
+#     pass
 
 def update_se_tree():
     global se_tree_dict
@@ -124,31 +130,35 @@ def clear_fields():
     window[k_txt_pwd].update(value='')
     window[k_txt_sdata].update(value='')
 
+
 def open_entry(id: int):
     # Open n/h w/o pwd
-    pv.open_entry(id, setAsCurrent=True)
+    if pv.open_entry(id, setAsCurrent=True):
+        # Fetch name and hint and populate
+        n, h = pv.get_name_hint_by_id(id)
 
-    # Fetch name and hint and populate
-    n, h = pv.get_name_hint_by_id(id)
+        clear_fields()
+        window[k_btn_ue].update(disabled=True)
+        window[k_txt_se].update(values=[n], set_to_index=0)
+        window[k_txt_hint].update(value=h)
+    else:
+        #TODO: any error to show here?
+        pass
 
-    clear_fields()
-    window[k_txt_se].update(values=[n], set_to_index=0)
-    window[k_txt_hint].update(value=h)
-
-    # Enable Open button
-    window[k_btn_oe].update(disabled=False)
 
 def close_all():
     pv.close_all()
     clear_fields()
     window[k_btn_oe].update(disabled=True)
 
+
 def get_selected_id():
     sel = values[k_lst_setree][0]
     # Get id of selected entry in the tree
     return se_tree_dict[sel]
 
-# Event Loop
+
+# Event Loop for GUI
 while True:
     event, values = window.read()
 
@@ -224,6 +234,13 @@ while True:
         
         update_se_tree()
     
+    elif event == k_txt_pwd:
+        # Enable Open button if hint response not empty
+        if len(values[k_txt_pwd]) > 0:
+            window[k_btn_oe].update(disabled=False)
+        else:
+            window[k_btn_oe].update(disabled=True)
+
     elif event == k_btn_oe:
         id = get_selected_id()
         hr = values[k_txt_pwd]
@@ -235,7 +252,35 @@ while True:
         if sc is None:
             sg.popup_error('Incorrect Hint Response')
         else:
+            # Update data field
             window[k_txt_sdata].update(value=sc)
+            
+            # Enable editing
+            # TODO: fix bug in updating
+            # window[k_btn_ue].update(disabled=False)
+
+            # Enable delete
+            if not pv.curr_entry_has_child():
+                #TODO: enable delete once coded
+                # window[k_btn_de].update(disabled=False)
+                pass
+
             # TODO: add timeout to clear k_txt_sdata
 
+    elif event == k_btn_ue:
+        n = values[k_txt_se]
+        h = values[k_txt_hint]
+        hr = values[k_txt_pwd]
+        d = values[k_txt_sdata]
+
+        # Check if any cvhanges made?
+        if pv.has_curr_entry_changed(n, h, hr, d):
+            msg = 'Name={0}\nHint={1}\nHint Respose={2}\nData={3}'.format(n, h, hr, d)
+            ch = sg.popup_ok_cancel(msg, '',  title="Confirm Entry Updation")
+
+            if ch == 'OK':
+                pv.update_curr_entry(n, h, hr, d)
+
+
+# When program closed
 window.close()
